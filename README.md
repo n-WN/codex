@@ -83,6 +83,7 @@ Codex CLI supports a rich set of configuration options, with preferences stored 
   - [Login on a "Headless" machine](./docs/authentication.md#connecting-on-a-headless-machine)
 - **Automating Codex**
   - [GitHub Action](https://github.com/openai/codex-action)
+  - [Automatic PR Review](./docs/pr-review.md)
   - [TypeScript SDK](./sdk/typescript/README.md)
   - [Non-interactive mode (`codex exec`)](./docs/exec.md)
 - [**Advanced**](./docs/advanced.md)
