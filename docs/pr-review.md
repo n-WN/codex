@@ -2,10 +2,32 @@
 
 Codex can automatically review pull requests and post comments, similar to GitHub Copilot's PR review feature.
 
+## Quick Start
+
+The PR review workflow is installed in `.github/workflows/pr-reviewer.yml` but requires configuration:
+
+1. **Manual trigger (enabled by default)**: Add a `codex-review` or `codex-rust-review` label to any PR
+2. **Automatic trigger (opt-in)**: Edit `.github/workflows/pr-reviewer.yml` and uncomment the `opened` and `synchronize` event types
+
 ## How It Works
 
-The PR review workflow (`.github/workflows/pr-reviewer.yml`) automatically triggers when:
+The PR review workflow can trigger in two ways:
 
+### Manual Trigger (Default)
+- Add the `codex-review` or `codex-rust-review` label to a PR
+
+### Automatic Trigger (Opt-in)
+To enable automatic reviews, edit `.github/workflows/pr-reviewer.yml` and uncomment these lines:
+```yaml
+on:
+  pull_request:
+    types:
+      - opened      # Uncomment to review new PRs automatically
+      - synchronize # Uncomment to review PR updates automatically
+      - labeled
+```
+
+Once enabled, automatic reviews will trigger when:
 1. A new pull request is opened
 2. A pull request is updated (synchronized)
 3. A PR is labeled with `codex-review` or `codex-rust-review`

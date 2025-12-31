@@ -1,16 +1,23 @@
 name: PR Reviewer
 
+# This workflow provides automatic PR review using Codex.
+# By default, it only runs when explicitly triggered via labels.
+# To enable automatic reviews on PR creation/updates, uncomment the event types below.
+
 on:
   pull_request:
     types:
-      - opened
-      - synchronize
+      # Uncomment these to enable automatic reviews:
+      # - opened
+      # - synchronize
+      # Manual trigger via labels (always enabled):
       - labeled
 
 jobs:
   review-pr:
     name: Review Pull Request with Codex
-    # Run on PR opened/synchronized, or when codex-review or codex-rust-review labels are added
+    # Run when codex-review or codex-rust-review labels are added
+    # If you enabled automatic reviews, this will also run on opened/synchronized events
     if: |
       github.event.action == 'opened' || 
       github.event.action == 'synchronize' ||
