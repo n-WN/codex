@@ -1,0 +1,111 @@
+name: PR Reviewer
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - labeled
+
+jobs:
+  review-pr:
+    name: Review Pull Request with Codex
+    # Run on PR opened/synchronized, or when codex-review or codex-rust-review labels are added
+    if: |
+      github.event.action == 'opened' || 
+      github.event.action == 'synchronize' ||
+      (github.event.action == 'labeled' && (github.event.label.name == 'codex-review' || github.event.label.name == 'codex-rust-review'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+
+      - name: Determine review prompt
+        id: review-prompt
+        run: |
+          # Default to general review
+          PROMPT_FILE=".github/codex/labels/codex-review.md"
+          
+          # Check for rust-specific review label
+          if [[ "${{ github.event.action }}" == "labeled" && "${{ github.event.label.name }}" == "codex-rust-review" ]]; then
+            PROMPT_FILE=".github/codex/labels/codex-rust-review.md"
+          fi
+          
+          # Check if PR has rust changes for automatic rust review selection
+          if [[ "${{ github.event.action }}" != "labeled" ]]; then
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }}..HEAD)
+            if echo "$CHANGED_FILES" | grep -q "^codex-rs/"; then
+              PROMPT_FILE=".github/codex/labels/codex-rust-review.md"
+            fi
+          fi
+          
+          echo "prompt_file=$PROMPT_FILE" >> "$GITHUB_OUTPUT"
+          echo "Using prompt file: $PROMPT_FILE"
+
+      - name: Read review prompt
+        id: read-prompt
+        run: |
+          PROMPT_CONTENT=$(cat "${{ steps.review-prompt.outputs.prompt_file }}")
+          
+          # Replace {CODEX_ACTION_GITHUB_EVENT_PATH} placeholder with actual path
+          PROMPT_CONTENT="${PROMPT_CONTENT//\{CODEX_ACTION_GITHUB_EVENT_PATH\}/\$GITHUB_EVENT_PATH}"
+          
+          # Use a delimiter to handle multiline content
+          echo "prompt_content<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$PROMPT_CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - id: codex
+        uses: openai/codex-action@main
+        with:
+          openai-api-key: ${{ secrets.CODEX_OPENAI_API_KEY }}
+          allow-users: "*"
+          prompt: |
+            ${{ steps.read-prompt.outputs.prompt_content }}
+            
+            Pull Request #${{ github.event.pull_request.number }}
+            Title: ${{ github.event.pull_request.title }}
+            
+            PR Body:
+            ${{ github.event.pull_request.body }}
+            
+            Author: ${{ github.event.pull_request.user.login }}
+            Base branch: ${{ github.event.pull_request.base.ref }}
+            Head branch: ${{ github.event.pull_request.head.ref }}
+
+      - name: Post review comment
+        if: steps.codex.outputs.final-message != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_CONTENT: ${{ steps.codex.outputs.final-message }}
+        run: |
+          # Post the review as a comment
+          {
+            echo "## 🤖 Codex PR Review"
+            echo ""
+            echo "$REVIEW_CONTENT"
+          } | gh pr comment "$PR_NUMBER" --body-file -
+
+      - name: Remove review trigger label
+        if: |
+          always() && 
+          github.event.action == 'labeled' && 
+          (github.event.label.name == 'codex-review' || github.event.label.name == 'codex-rust-review')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUMBER" --remove-label "${{ github.event.label.name }}" || true
+          echo "Attempted to remove label: ${{ github.event.label.name }}"
